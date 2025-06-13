@@ -10,16 +10,28 @@ class BookResource(resources.ModelResource):
     # If using the fields attribute to declare fields then
     # the declared resource attribute name must appear in the fields list
     published_field = Field(attribute='published', column_name='published_date',
-                           widget=DateWidget(format='%d.%m.%Y') )
+                           widget=DateWidget(format='%Y-%m-%d'))
 
     # This method runs for every row after it's saved.
     def after_import_row(self, row, row_result, **kwargs):
-        if getattr(row_result.original, "published") is None \
-            and getattr(row_result.instance, "published") is not None:
+        # Consider checking for None values, which might lead to an error
+        original = row_result.original
+        instance = row_result.instance
+
+        # if getattr(row_result.original, "published") is None \
+        #     and getattr(row_result.instance, "published") is not None:
+        # The above logic is replaced as:
+        if original is not None and original.published is None \
+            and instance is not None and instance.published is None:
             # import value is different from stored value.
             # execute your custom logic here, like sending an email.
             print(f"Workflow triggered for books: {row_result.instance.name}")
             # send_new_release notification(row_result.instance)
+        else:
+            # Log what we actually received for debugging
+            print(f"Debug - Original: {original}, Instance: {instance}")
+            if instance:
+                print(f"Instance published: {getattr(instance, 'published', 'MISSING')}")
 
     def for_delete(self, row, instance):
         # Delete if 'delete' column has value '1'
