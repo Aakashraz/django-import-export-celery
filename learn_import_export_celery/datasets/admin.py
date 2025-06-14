@@ -40,6 +40,22 @@ class BookResource(resources.ModelResource):
             if instance:
                 print(f"Instance published: {getattr(instance, 'published', 'MISSING')}")
 
+        # for index, row_result in enumerate(result.rows):
+        # This row_result in above for loop: ---
+        # --- The row_result.__dict__ output is like looking at the internal 'medical record' of a failed row import,
+        # and it tells us a very specific story about what went wrong. The output is given below:
+        # {
+        #     'errors': [],                    # No general import errors
+        #     'validation_error': ValidationError({'published': ['Value could not be parsed using defined formats.']}),
+        #     'diff': None,                    # No diff because validation failed
+        #     'import_type': 'invalid',        # This row was marked as invalid
+        #     'row_values': {},               # Empty because validation failed early
+        #     'object_id': None,              # No database object was created
+        #     'object_repr': None,            # No object representation available
+        #     'instance': None,               # No Django model instance was created
+        #     'original': None                # No original object (this was meant to be new)
+        # }
+
     def for_delete(self, row, instance):
         # Delete if 'delete' column has value '1'
         return row.get("delete")=="1"
