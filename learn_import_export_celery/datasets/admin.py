@@ -27,6 +27,13 @@ class BookResource(resources.ModelResource):
             # execute your custom logic here, like sending an email.
             print(f"Workflow triggered for books: {row_result.instance.name}")
             # send_new_release notification(row_result.instance)
+
+        # Diagnostic information for troubleshooting
+        elif instance is not None and hasattr(instance, 'published') and  instance.published is not None:
+            # The date field is None, which might indicate parsing failure
+            raw_date_value = row.get('published_field', 'NOT_FOUND')
+            print(f"Warning: Date parsing may have failed for '{instance.name}'. Raw value:'{raw_date_value}'")
+
         else:
             # Log what we actually received for debugging
             print(f"Debug - Original: {original}, Instance: {instance}")
