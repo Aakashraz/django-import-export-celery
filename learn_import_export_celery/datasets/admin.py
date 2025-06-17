@@ -3,7 +3,16 @@ from import_export import resources
 from datasets.models import Book
 from import_export.fields import Field
 from import_export.admin import ImportExportModelAdmin
-from import_export.widgets import DateWidget
+from import_export.widgets import DateWidget, IntegerWidget
+
+
+class PositiveIntegerWidget(IntegerWidget):
+    """Return a positive integer value"""
+    def clean(self, value, row=None, **kwargs):
+        val = super().clean(value, row=row, **kwargs)
+        if val is not None and val < 0:
+            raise ValueError("value must be positive")
+        return val
 
 
 class BookResource(resources.ModelResource):
@@ -11,6 +20,7 @@ class BookResource(resources.ModelResource):
     # the declared resource attribute name must appear in the fields list
     published_field = Field(attribute='published', column_name='published_date',
                            widget=DateWidget(format='%Y-%m-%d'))
+    price = Field(attribute='price', column_name='price', widget=PositiveIntegerWidget())
 
     # This method runs for every row after it's saved.
     def after_import_row(self, row, row_result, **kwargs):
