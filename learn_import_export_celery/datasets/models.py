@@ -1,4 +1,6 @@
 from django.db import models
+from jsonschema.exceptions import ValidationError
+from datetime import date
 
 
 class Author(models.Model):
@@ -27,3 +29,11 @@ class Book(models.Model):
     def __str__(self):
         return self.name
 
+    def full_clean(self, exclude=None, validate_unique=True, validation_constraints=False):
+        super().full_clean(exclude, validate_unique)
+        # not field specific validation
+        if self.published < date(1900, 1,1):
+            raise ValidationError("book is out of print")
+        # field specific validation
+        if self.name == "Ulysses":
+            raise ValidationError({"name": "book has been banned"})
