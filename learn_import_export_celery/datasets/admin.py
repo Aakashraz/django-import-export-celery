@@ -1,9 +1,9 @@
 from django.contrib import admin
 from import_export import resources
-from datasets.models import Book
+from .models import Book, Author, Category
 from import_export.fields import Field
 from import_export.admin import ImportExportModelAdmin
-from import_export.widgets import DateWidget, IntegerWidget
+from import_export.widgets import DateWidget, IntegerWidget, ForeignKeyWidget, ManyToManyWidget
 
 
 class PositiveIntegerWidget(IntegerWidget):
@@ -21,6 +21,16 @@ class BookResource(resources.ModelResource):
     published_field = Field(attribute='published', column_name='published_date',
                            widget=DateWidget(format='%Y-%m-%d'))
     price = Field(attribute='price', column_name='price', widget=PositiveIntegerWidget())
+
+    author = Field(attribute='author',column_name='author',
+                   widget=ForeignKeyWidget(Author, field='name'))
+    # This is implemented as a Model.objects.get() query, so if the instance in not uniquely identifiable based
+    # on the given arg, then the import process will raise either DoesNotExist or MultipleObjectsReturned errors.
+    # Example: The query Author.objects.get(name="J.K. Rowling") is needed during CSV import because
+    # the Book.author field is a ForeignKey that requires an existing Author instance, not a string like "J.K. Rowling".
+
+    categories = Field(attribute='categories', column_name='categories',
+                       widget=ManyToManyWidget(Category, field='name', seperator='|'))
 
     # This method runs for every row after it's saved.
     def after_import_row(self, row, row_result, **kwargs):
