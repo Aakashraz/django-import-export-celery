@@ -15,6 +15,31 @@ class PositiveIntegerWidget(IntegerWidget):
         return val
 
 
+class AuthorForeignKeyWidget(ForeignKeyWidget):
+    """
+    A ForeignKeyWidget for the Author model that handles two special cases:
+    1. If an author name is not found in the database, it creates a new Author.
+    2. If the author name is missing or empty in the imported file, it assigns
+       a default Author with the name 'NA'.
+    """
+    def clean(self, value, row=None, **kwargs):
+        # The value parameter holds the data from the cell in the imported file.
+        # We first check if this value is empty, None, or otherwise "falsy".
+        if not value:
+            # If the value is missing, we'll use 'NA' as the author's name.
+            # It fetches the Author named 'NA' if it already exists, or creates
+            # it if it doesn't, all in a single database transaction.
+            author_instance, created = Author.objects.get_or_create(name="NA")
+            return author_instance
+
+        # If a value exists, we proceed with the original logic.
+        try:
+            # 'super().clean(value)' will attempt to find the Author in the database using the provided value.
+            return super().clean(value, row, **kwargs)
+        except Author.DoesNotExist:
+            return Author.objects.create(name=value)
+
+
 class BookResource(resources.ModelResource):
     # If using the fields attribute to declare fields then
     # the declared resource attribute name must appear in the fields list
@@ -23,7 +48,7 @@ class BookResource(resources.ModelResource):
     price = Field(attribute='price', column_name='price', widget=PositiveIntegerWidget())
 
     author = Field(attribute='author',column_name='author',
-                   widget=ForeignKeyWidget(Author, field='name'))
+                   widget=AuthorForeignKeyWidget(Author, field='name'))
     # This is implemented as a Model.objects.get() query, so if the instance in not uniquely identifiable based
     # on the given arg, then the import process will raise either DoesNotExist or MultipleObjectsReturned errors.
     # Example: The query Author.objects.get(name="J.K. Rowling") is needed during CSV import because
