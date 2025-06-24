@@ -22,13 +22,25 @@ class AuthorForeignKeyWidget(ForeignKeyWidget):
     2. If the author name is missing or empty in the imported file, it assigns
        a default Author with the name 'NA'.
     """
+    model = Author
+    field = 'name'
+
+    def __init__(self, publisher_id, **kwargs):
+        super().__init__(self.model, field=self.field, **kwargs)
+        self.publisher_id = publisher_id
+
+    # Customize Relation lookup
+    def get_queryset(self, value, row, *args, **kwargs):
+        return self.model.objects.filter(publisher_id=self.publisher_id)
+
+
     def clean(self, value, row=None, **kwargs):
         # The value parameter holds the data from the cell in the imported file.
         # We first check if this value is empty, None, or otherwise "falsy".
         if not value:
             # If the value is missing, we'll use 'NA' as the author's name.
-            # It fetches the Author named 'NA' if it already exists, or creates
-            # it if it doesn't, all in a single database transaction.
+            # It fetches the Author named 'NA' if it already exists, or creates it if it doesn't,
+            # all in a single database transaction.
             author_instance, created = Author.objects.get_or_create(name="NA")
             return author_instance
 
@@ -47,8 +59,17 @@ class BookResource(resources.ModelResource):
                            widget=DateWidget(format='%Y-%m-%d'))
     price = Field(attribute='price', column_name='price', widget=PositiveIntegerWidget())
 
-    author = Field(attribute='author',column_name='author',
-                   widget=AuthorForeignKeyWidget(Author, field='name'))
+    # author = Field(attribute='author',column_name='author',
+    #                widget=AuthorForeignKeyWidget(Author, field='name'))
+    # For Dynamically setting/accessing the author field with the publisher_id
+    def __init__(self, publisher_id):
+        super().__init__()
+        self.fields["author"] = Field(
+            attribute="author", column_name='author',
+            widget=AuthorForeignKeyWidget(publisher_id),
+            # Passes publisher_id to the AuthorForeignKeyWidget, enabling runtime customization.
+        )
+
     # This is implemented as a Model.objects.get() query, so if the instance in not uniquely identifiable based
     # on the given arg, then the import process will raise either DoesNotExist or MultipleObjectsReturned errors.
     # Example: The query Author.objects.get(name="J.K. Rowling") is needed during CSV import because
