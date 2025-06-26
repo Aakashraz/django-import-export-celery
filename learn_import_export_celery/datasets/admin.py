@@ -65,8 +65,9 @@ class BookResource(resources.ModelResource):
     def __init__(self, publisher_id):
         super().__init__()
         self.fields["author"] = Field(
-            attribute="author", column_name='author',
-            widget=AuthorForeignKeyWidget(publisher_id),
+            attribute="author",
+            column_name='author',
+            widget=AuthorForeignKeyWidget(publisher_id, use_natural_foreign_keys=True),
             # Passes publisher_id to the AuthorForeignKeyWidget, enabling runtime customization.
         )
 
@@ -133,6 +134,8 @@ class BookResource(resources.ModelResource):
         export_order = ('id', 'price', 'author', 'name')
         # You MUST enable this switch for the (after_import()) feature to work.
         store_instance = True
+        # All widgets with foreign key functions use them.
+        # use_natural_foreign_keys = True
 
 
 @admin.register(Book)
