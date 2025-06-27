@@ -1,3 +1,5 @@
+import hashlib
+
 from django.contrib import admin
 from import_export import resources
 from .models import Book, Author, Category
@@ -67,9 +69,18 @@ class BookResource(resources.ModelResource):
         self.fields["author"] = Field(
             attribute="author",
             column_name='author',
-            widget=AuthorForeignKeyWidget(publisher_id, use_natural_foreign_keys=True),
+            widget=AuthorForeignKeyWidget(publisher_id),    # No use_natural_foreign_keys=True
             # Passes publisher_id to the AuthorForeignKeyWidget, enabling runtime customization.
         )
+
+    # Using hash_id as dynamic unique identifier
+    def before_import(self, dataset, **kwargs):
+        dataset.headers.append("hash_id")
+        super().before_import(dataset, **kwargs)
+
+    def before_import_row(self, row, **kwargs):
+        row["hash_id"] = hashlib.sha256(row['name'].encode()).hexdigest()
+
 
     # This is implemented as a Model.objects.get() query, so if the instance in not uniquely identifiable based
     # on the given arg, then the import process will raise either DoesNotExist or MultipleObjectsReturned errors.
@@ -136,6 +147,7 @@ class BookResource(resources.ModelResource):
         store_instance = True
         # All widgets with foreign key functions use them.
         # use_natural_foreign_keys = True
+        import_id_fields = ('hash_id',)     # To uniquely identify Book
 
 
 @admin.register(Book)
