@@ -79,6 +79,9 @@ class BookResource(resources.ModelResource):
         super().before_import(dataset, **kwargs)
 
     def before_import_row(self, row, **kwargs):
+        # To check if 'name' value exist.
+        if 'name' not in row or not row['name']:
+            raise ValueError("Row missing 'name' column or value.")
         row["hash_id"] = hashlib.sha256(row['name'].encode()).hexdigest()
 
 
