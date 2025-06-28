@@ -60,6 +60,7 @@ class BookResource(resources.ModelResource):
     published_field = Field(attribute='published', column_name='published_date',
                            widget=DateWidget(format='%Y-%m-%d'))
     price = Field(attribute='price', column_name='price', widget=PositiveIntegerWidget())
+    hash_id = Field(column_name='hash_id', attribute=None)      # Define Dynamic Field
 
     # author = Field(attribute='author',column_name='author',
     #                widget=AuthorForeignKeyWidget(Author, field='name'))
@@ -75,7 +76,10 @@ class BookResource(resources.ModelResource):
 
     # Using hash_id as dynamic unique identifier
     def before_import(self, dataset, **kwargs):
-        dataset.headers.append("hash_id")
+        print("Headers:", dataset.headers)
+        print("Data:", dataset.dict)
+        if 'hash_id' not in dataset.headers:
+            dataset.headers.append("hash_id")
         super().before_import(dataset, **kwargs)
 
     def before_import_row(self, row, **kwargs):
@@ -84,6 +88,13 @@ class BookResource(resources.ModelResource):
             raise ValueError("Row missing 'name' column or value.")
         row["hash_id"] = hashlib.sha256(row['name'].encode()).hexdigest()
 
+    # By providing your own get_instance method, you are telling django-import-export:
+    # "Stop. Don't use your default lookup logic. I will provide the exact instructions
+    # to find the database object myself."
+    def get_instance(self, instance_loader, row):
+        # Override to avoid model lookup for hash_id
+        return None     # Treat all rows as new or handle custom logic if needed.
+
 
     # This is implemented as a Model.objects.get() query, so if the instance in not uniquely identifiable based
     # on the given arg, then the import process will raise either DoesNotExist or MultipleObjectsReturned errors.
@@ -91,7 +102,7 @@ class BookResource(resources.ModelResource):
     # the Book.author field is a ForeignKey that requires an existing Author instance, not a string like "J.K. Rowling".
 
     categories = Field(attribute='categories', column_name='categories',
-                       widget=ManyToManyWidget(Category, field='name', seperator='|'))
+                       widget=ManyToManyWidget(Category, field='name', separator='|'))
 
     # This method runs for every row after it's saved.
     def after_import_row(self, row, row_result, **kwargs):
@@ -143,14 +154,18 @@ class BookResource(resources.ModelResource):
 
     class Meta:
         model = Book
-        fields = ('id', 'name', 'price', 'author', 'published_field')
-        import_order = ('id', 'price')
-        export_order = ('id', 'price', 'author', 'name')
+        fields = ('hash_id', 'name', 'price', 'author', 'published_field')
+
+        import_id_fields = ('hash_id',)     # To uniquely identify Book
+        # This is what the library attempts internally when it sees -- import_id_fields = ('hash_id')
+        # --Book.objects.get(hash_id=''aeed497bc5c30...')
+
+        # import_order = ('id', 'price')
+        # export_order = ('id', 'price', 'author', 'name')
         # You MUST enable this switch for the (after_import()) feature to work.
         store_instance = True
         # All widgets with foreign key functions use them.
         # use_natural_foreign_keys = True
-        import_id_fields = ('hash_id',)     # To uniquely identify Book
 
 
 @admin.register(Book)
