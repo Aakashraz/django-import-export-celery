@@ -1,3 +1,5 @@
+import hashlib
+
 from django.contrib import admin
 from import_export import resources
 from .models import Book, Author, Category
@@ -15,22 +17,92 @@ class PositiveIntegerWidget(IntegerWidget):
         return val
 
 
+class AuthorForeignKeyWidget(ForeignKeyWidget):
+    """
+    A ForeignKeyWidget for the Author model that handles two special cases:
+    1. If an author name is not found in the database, it creates a new Author.
+    2. If the author name is missing or empty in the imported file, it assigns
+       a default Author with the name 'NA'.
+    """
+    model = Author
+    field = 'name'
+
+    def __init__(self, publisher_id, **kwargs):
+        super().__init__(self.model, field=self.field, **kwargs)
+        self.publisher_id = publisher_id
+
+    # Customize Relation lookup
+    def get_queryset(self, value, row, *args, **kwargs):
+        return self.model.objects.filter(publisher_id=self.publisher_id)
+
+
+    def clean(self, value, row=None, **kwargs):
+        # The value parameter holds the data from the cell in the imported file.
+        # We first check if this value is empty, None, or otherwise "falsy".
+        if not value:
+            # If the value is missing, we'll use 'NA' as the author's name.
+            # It fetches the Author named 'NA' if it already exists, or creates it if it doesn't,
+            # all in a single database transaction.
+            author_instance, created = Author.objects.get_or_create(name="NA")
+            return author_instance
+
+        # If a value exists, we proceed with the original logic.
+        try:
+            # 'super().clean(value)' will attempt to find the Author in the database using the provided value.
+            return super().clean(value, row, **kwargs)
+        except Author.DoesNotExist:
+            return Author.objects.create(name=value)
+
+
 class BookResource(resources.ModelResource):
     # If using the fields attribute to declare fields then
     # the declared resource attribute name must appear in the fields list
     published_field = Field(attribute='published', column_name='published_date',
                            widget=DateWidget(format='%Y-%m-%d'))
     price = Field(attribute='price', column_name='price', widget=PositiveIntegerWidget())
+    hash_id = Field(column_name='hash_id', attribute=None)      # Define Dynamic Field
 
-    author = Field(attribute='author',column_name='author',
-                   widget=ForeignKeyWidget(Author, field='name'))
+    # author = Field(attribute='author',column_name='author',
+    #                widget=AuthorForeignKeyWidget(Author, field='name'))
+    # For Dynamically setting/accessing the author field with the publisher_id
+    def __init__(self, publisher_id):
+        super().__init__()
+        self.fields["author"] = Field(
+            attribute="author",
+            column_name='author',
+            widget=AuthorForeignKeyWidget(publisher_id),    # No use_natural_foreign_keys=True
+            # Passes publisher_id to the AuthorForeignKeyWidget, enabling runtime customization.
+        )
+
+    # Using hash_id as dynamic unique identifier
+    def before_import(self, dataset, **kwargs):
+        print("Headers:", dataset.headers)
+        print("Data:", dataset.dict)
+        if 'hash_id' not in dataset.headers:
+            dataset.headers.append("hash_id")
+        super().before_import(dataset, **kwargs)
+
+    def before_import_row(self, row, **kwargs):
+        # To check if 'name' value exist.
+        if 'name' not in row or not row['name']:
+            raise ValueError("Row missing 'name' column or value.")
+        row["hash_id"] = hashlib.sha256(row['name'].encode()).hexdigest()
+
+    # By providing your own get_instance method, you are telling django-import-export:
+    # "Stop. Don't use your default lookup logic. I will provide the exact instructions
+    # to find the database object myself."
+    def get_instance(self, instance_loader, row):
+        # Override to avoid model lookup for hash_id
+        return None     # Treat all rows as new or handle custom logic if needed.
+
+
     # This is implemented as a Model.objects.get() query, so if the instance in not uniquely identifiable based
     # on the given arg, then the import process will raise either DoesNotExist or MultipleObjectsReturned errors.
     # Example: The query Author.objects.get(name="J.K. Rowling") is needed during CSV import because
     # the Book.author field is a ForeignKey that requires an existing Author instance, not a string like "J.K. Rowling".
 
     categories = Field(attribute='categories', column_name='categories',
-                       widget=ManyToManyWidget(Category, field='name', seperator='|'))
+                       widget=ManyToManyWidget(Category, field='name', separator='|'))
 
     # This method runs for every row after it's saved.
     def after_import_row(self, row, row_result, **kwargs):
@@ -82,11 +154,18 @@ class BookResource(resources.ModelResource):
 
     class Meta:
         model = Book
-        fields = ('id', 'name', 'price', 'author', 'published_field')
-        import_order = ('id', 'price')
-        export_order = ('id', 'price', 'author', 'name')
+        fields = ('hash_id', 'name', 'price', 'author', 'published_field')
+
+        import_id_fields = ('hash_id',)     # To uniquely identify Book
+        # This is what the library attempts internally when it sees -- import_id_fields = ('hash_id')
+        # --Book.objects.get(hash_id=''aeed497bc5c30...')
+
+        # import_order = ('id', 'price')
+        # export_order = ('id', 'price', 'author', 'name')
         # You MUST enable this switch for the (after_import()) feature to work.
         store_instance = True
+        # All widgets with foreign key functions use them.
+        # use_natural_foreign_keys = True
 
 
 @admin.register(Book)

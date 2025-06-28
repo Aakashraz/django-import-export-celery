@@ -3,8 +3,21 @@ from jsonschema.exceptions import ValidationError
 from datetime import date
 
 
+class AuthorManager(models.Manager):
+    def get_by_natural_key(self, name):
+        return self.get(name=name)
+        # Search the Author table in the database for a single row where the 'name' column is equal to the
+        # value we received as 'name'.
+
+
 class Author(models.Model):
+    # We assign our custom manager to the model
+    objects = AuthorManager()
+
     name = models.CharField(max_length=100)
+
+    def natural_key(self):
+        return (self.name,)
 
     def __str__(self):
         return self.name
