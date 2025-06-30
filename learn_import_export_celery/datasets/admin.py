@@ -92,9 +92,18 @@ class BookResource(resources.ModelResource):
     # "Stop. Don't use your default lookup logic. I will provide the exact instructions
     # to find the database object myself."
     def get_instance(self, instance_loader, row):
-        # Override to avoid model lookup for hash_id
-        return None     # Treat all rows as new or handle custom logic if needed.
+        # Override to return None prevents the library from trying to query the Book model for
+        # hash_id (which doesn't exist).
+        # return None   # Treat all rows as new or handle custom logic if needed.
 
+        if 'name' not in row or not row['name']:
+            return None
+
+        # Find Book with matching name (since hash_id is derived from name)
+        try:
+            return self.Meta.model.objects.get(name=row['name'])
+        except self.Meta.model.DoesNotExist:
+            return None
 
     # This is implemented as a Model.objects.get() query, so if the instance in not uniquely identifiable based
     # on the given arg, then the import process will raise either DoesNotExist or MultipleObjectsReturned errors.
@@ -154,10 +163,15 @@ class BookResource(resources.ModelResource):
 
     class Meta:
         model = Book
-        fields = ('hash_id', 'name', 'price', 'author', 'published_field')
+        fields = ('hash_id','id', 'name','price', 'author', 'published_field', 'categories' )
 
+        # import_id_fields is concerned with "What column(s) in my CSV file make a row unique?"
+        # get_instance() is concerned with "How do I take the value from that unique CSV column and
+        # use it to find an object in my database?"
         import_id_fields = ('hash_id',)     # To uniquely identify Book
-        # This is what the library attempts internally when it sees -- import_id_fields = ('hash_id')
+        # The default get_instance() logic constructs a database query based directly on the import_id_fields.
+        # It tries to execute the following --
+        # --This is what the library attempts internally when it sees -- import_id_fields = ('hash_id')
         # --Book.objects.get(hash_id=''aeed497bc5c30...')
 
         # import_order = ('id', 'price')
