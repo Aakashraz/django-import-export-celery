@@ -1,10 +1,13 @@
 import hashlib
 
+from django import forms
 from django.contrib import admin
 from import_export import resources
+from import_export.forms import ImportForm, ConfirmImportForm
+
 from .models import Book, Author, Category
 from import_export.fields import Field
-from import_export.admin import ImportExportModelAdmin
+from import_export.admin import ImportExportModelAdmin, ImportMixin
 from import_export.widgets import DateWidget, IntegerWidget, ForeignKeyWidget, ManyToManyWidget
 
 
@@ -185,3 +188,84 @@ class BookResource(resources.ModelResource):
 @admin.register(Book)
 class BookAdmin(ImportExportModelAdmin):
     resource_class = BookResource
+
+
+# CUSTOMIZE IMPORT FORMS
+# The initial form where the user uploads a file and selects additional options (like the author).
+class CustomImportForm(ImportForm):
+    author = forms.ModelChoiceField(
+        queryset=Author.objects.all(),
+        required=True)
+
+
+# The confirmation form where the user reviews the data before finalizing the import.
+class CustomConfirmImportForm(ConfirmImportForm):
+    author = forms.ModelChoiceField(
+        queryset=Author.objects.all(),
+        required=True)
+
+
+# Customizing ModelAdmin
+class CustomBookAdmin(ImportMixin, admin.ModelAdmin):
+    resource_class = [BookResource]
+    # Tells Django to use the custom import form with the author field.
+    import_form_class = CustomImportForm
+    # Uses the custom confirmation form.
+    confirm_form_class = CustomConfirmImportForm
+
+    # This method ensures the `author` selected in the initial import form is passed to
+    # the confirmation form.
+    def get_confirm_form_initial(self, request, import_form):
+        # import_form is an instance of the form class defined by import_form_class, not
+        # the form class itself.
+        initial = super().get_confirm_form_initial(request, import_form)
+        # initial = super().get_confirm_form_initial() gets the default initial values from ImportMixin.
+
+
+        # Pass on the 'author' value from the import form to the confirm firm (if provided).
+        if import_form:
+            initial['author'] = import_form.cleaned_data['author'].id
+        return initial
+        # After this method runs, django-import-export uses the returned initial dictionary to instantiate
+        # the confirmation form (e.g., CustomConfirmImportForm).
+
+        # Why Returning initial Works
+        # The initial dictionary is the standard way Django forms receive default values. By returning it
+        # from get_confirm_form_initial(), you’re explicitly telling the confirmation form what values to start with.
+        # In this case, adding 'author' to initial ensures the confirmation form’s author field is prefilled with
+        # the value from import_form.cleaned_data['author'].
+
+
+
+    # Saving the Author with the EBook
+    # To actually associate the selected `author` with each imported Ebook instance, two more
+    # methods are added to CustomBookAdmin
+    def get_import_data_kwargs(self, request, *args, **kwargs):
+        """
+        Prepare kwargs for import_data
+        """
+        form = kwargs.get("form", None)
+        if form and hasattr(form, "cleaned_data"):
+            kwargs.update({"author": form.cleaned_data.get("author", None)})
+        return kwargs
+
+    def after_init_instance(self, instance, new, row, **kwargs):
+        if "author" in kwargs:
+            instance.author = kwargs["author"]
+            # `instance` is an object of the EBook model,
+            # this line takes the author from kwargs (provided via the form)
+            # and assigns it to the author field of the EBook instance. This happens for each EBook being imported,
+            # ensuring that every imported ebook is linked to the selected author.
+
+# The selected `author` is now set as an attribute on the instance object. When the instance
+# is saved, then the author is set as a foreign key relation to the instance.
+
+# What is kwargs?
+# kwargs is a dictionary that carries extra data through the import process. In this case,
+# kwargs["author"] contains the author selected by the user in the import form.
+
+
+# Registering the Admin
+admin.site.register(Book, CustomBookAdmin)
+
+
