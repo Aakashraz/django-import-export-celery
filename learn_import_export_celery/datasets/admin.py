@@ -3,7 +3,7 @@ import hashlib
 from django import forms
 from django.contrib import admin
 from import_export import resources
-from import_export.forms import ImportForm, ConfirmImportForm
+from import_export.forms import ImportForm, ConfirmImportForm, ExportForm
 
 from .models import Book, Author, Category
 from import_export.fields import Field
@@ -68,14 +68,25 @@ class BookResource(resources.ModelResource):
     # author = Field(attribute='author',column_name='author',
     #                widget=AuthorForeignKeyWidget(Author, field='name'))
     # For Dynamically setting/accessing the author field with the publisher_id
-    def __init__(self, publisher_id):
+    def __init__(self, publisher_id=None, author_id=None):
         super().__init__()
+        # Store author_id for export filtering
+        self.author_id = author_id
+
         self.fields["author"] = Field(
             attribute="author",
             column_name='author',
             widget=AuthorForeignKeyWidget(publisher_id),    # No use_natural_foreign_keys=True
             # Passes publisher_id to the AuthorForeignKeyWidget, enabling runtime customization.
         )
+
+    # The filter_export method assumes Book.author is a ForeignKey to Author,
+    # as it filters by author_id (the foreign key’s database column).
+    def filter_export(self, queryset, **kwargs):
+        # Apply author_id filter if provided
+        if self.author_id:
+            return queryset.filter(author_id=self.author_id)    # Filtered queryset
+        return queryset     # Unfiltered queryset
 
     # Using hash_id as dynamic unique identifier
     def before_import(self, dataset, **kwargs):
@@ -190,7 +201,7 @@ class BookAdmin(ImportExportModelAdmin):
     resource_class = BookResource
 
 
-# CUSTOMIZE IMPORT FORMS
+# ----------------- CUSTOMIZE IMPORT FORMS -------------------
 # The initial form where the user uploads a file and selects additional options (like the author).
 class CustomImportForm(ImportForm):
     author = forms.ModelChoiceField(
@@ -205,6 +216,13 @@ class CustomConfirmImportForm(ConfirmImportForm):
         required=True)
 
 
+class CustomExportForm(ExportForm):
+    """Customized ExportForm, with author field required."""
+    author = forms.ModelChoiceField(
+        queryset=Author.objects.all(),
+        required=True)
+
+
 # Customizing ModelAdmin
 class CustomBookAdmin(ImportMixin, admin.ModelAdmin):
     resource_class = [BookResource]
@@ -212,6 +230,8 @@ class CustomBookAdmin(ImportMixin, admin.ModelAdmin):
     import_form_class = CustomImportForm
     # Uses the custom confirmation form.
     confirm_form_class = CustomConfirmImportForm
+    # Use the custom export form instead of the default export form.
+    export_form_class = CustomExportForm
 
     # This method ensures the `author` selected in the initial import form is passed to
     # the confirmation form.
@@ -263,6 +283,16 @@ class CustomBookAdmin(ImportMixin, admin.ModelAdmin):
 # What is kwargs?
 # kwargs is a dictionary that carries extra data through the import process. In this case,
 # kwargs["author"] contains the author selected by the user in the import form.
+
+    # Overrides a method from the base class to customize the keyword arguments (kwargs)
+    # passed to the resource class.
+    def get_export_resource_kwargs(self, request, **kwargs):
+        # Retrieve the export_form from the kwargs (this is the submitted `CustomExportForm`)
+        export_form = kwargs.get("export_form")
+        if export_form and hasattr(export_form, "cleaned_data"):
+            kwargs.update(author_id=export_form.cleaned_data["author"].id)
+        return kwargs
+    # This ensures that the selected author's ID is passed to the BookResource when it's instantiated.
 
 
 # Registering the Admin
