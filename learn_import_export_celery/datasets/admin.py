@@ -63,7 +63,7 @@ class BookResource(resources.ModelResource):
     published_field = Field(attribute='published', column_name='published_date',
                            widget=DateWidget(format='%Y-%m-%d'))
     price = Field(attribute='price', column_name='price', widget=PositiveIntegerWidget())
-    hash_id = Field(column_name='hash_id', attribute=None)      # Define Dynamic Field
+    hash_id = Field(column_name='hash_id', attribute=None)      # Define Dynamic Field, not stored in the model
 
     # author = Field(attribute='author',column_name='author',
     #                widget=AuthorForeignKeyWidget(Author, field='name'))
@@ -85,7 +85,7 @@ class BookResource(resources.ModelResource):
     def filter_export(self, queryset, **kwargs):
         # Apply author_id filter if provided
         if self.author_id:
-            return queryset.filter(author_id=self.author_id)    # Filtered queryset
+            return queryset.filter(author_id=self.author_id)    # Filtered queryset (Dynamic Filtering)
         return queryset     # Unfiltered queryset
 
     # Using hash_id as dynamic unique identifier
