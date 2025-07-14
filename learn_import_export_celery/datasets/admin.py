@@ -11,6 +11,24 @@ from import_export.admin import ImportExportModelAdmin, ImportMixin
 from import_export.widgets import DateWidget, IntegerWidget, ForeignKeyWidget, ManyToManyWidget
 
 
+# for index, row_result in enumerate(result.rows):
+# This row_result in above for loop: ---
+# --- The row_result.__dict__ output is like looking at the internal 'medical record' of a failed row import,
+# and it tells us a very specific story about what went wrong. The output is given below:
+# {
+#     'errors': [],                    # No general import errors
+#     'validation_error': ValidationError({'published': ['Value could not be parsed using defined formats.']}),
+#     'diff': None,                    # No diff because validation failed
+#     'import_type': 'invalid',        # This row was marked as invalid
+#     'row_values': {},               # Empty because validation failed early
+#     'object_id': None,              # No database object was created
+#     'object_repr': None,            # No object representation available
+#     'instance': None,               # No Django model instance was created
+#     'original': None                # No original object (this was meant to be new)
+# }
+
+
+
 class PositiveIntegerWidget(IntegerWidget):
     """Return a positive integer value"""
     def clean(self, value, row=None, **kwargs):
@@ -29,6 +47,12 @@ class AuthorForeignKeyWidget(ForeignKeyWidget):
     """
     model = Author
     field = 'name'
+    # model = Author: This tells the ForeignKeyWidget that it's dealing
+    # with a foreign key relationship to the Author model.
+    #
+    # field = 'name': This is the crucial part. It means that when django-import-export
+    # encounters a value in the "Author" column of your import file, it will use that
+    # value to try and find an existing Author record by matching it against the name field of the Author model.
 
     def __init__(self, publisher_id, **kwargs):
         super().__init__(self.model, field=self.field, **kwargs)
@@ -40,7 +64,7 @@ class AuthorForeignKeyWidget(ForeignKeyWidget):
 
 
     def clean(self, value, row=None, **kwargs):
-        # The value parameter holds the data from the cell in the imported file.
+        # The value parameter holds the data from the cell (Author's column) in the imported file.
         # We first check if this value is empty, None, or otherwise "falsy".
         if not value:
             # If the value is missing, we'll use 'NA' as the author's name.
@@ -137,15 +161,15 @@ class BookResource(resources.ModelResource):
         #     and getattr(row_result.instance, "published") is not None:
         # The above logic is replaced as:
         if original is not None and original.published is None \
-            and instance is not None and instance.published is None:
+            and instance is not None and instance.published is not None:
             # import value is different from stored value.
             # execute your custom logic here, like sending an email.
             print(f"Workflow triggered for books: {row_result.instance.name}")
             # send_new_release notification(row_result.instance)
 
         # Diagnostic information for troubleshooting
-        elif instance is not None and hasattr(instance, 'published') and  instance.published is not None:
-            # The date field is None, which might indicate parsing failure
+        elif instance is not None and hasattr(instance, 'published') and  instance.published is None:
+            # The date field is None, which might indicate parsing failure or an empty field
             raw_date_value = row.get('published_field', 'NOT_FOUND')
             print(f"Warning: Date parsing may have failed for '{instance.name}'. Raw value:'{raw_date_value}'")
 
@@ -154,22 +178,6 @@ class BookResource(resources.ModelResource):
             print(f"Debug - Original: {original}, Instance: {instance}")
             if instance:
                 print(f"Instance published: {getattr(instance, 'published', 'MISSING')}")
-
-        # for index, row_result in enumerate(result.rows):
-        # This row_result in above for loop: ---
-        # --- The row_result.__dict__ output is like looking at the internal 'medical record' of a failed row import,
-        # and it tells us a very specific story about what went wrong. The output is given below:
-        # {
-        #     'errors': [],                    # No general import errors
-        #     'validation_error': ValidationError({'published': ['Value could not be parsed using defined formats.']}),
-        #     'diff': None,                    # No diff because validation failed
-        #     'import_type': 'invalid',        # This row was marked as invalid
-        #     'row_values': {},               # Empty because validation failed early
-        #     'object_id': None,              # No database object was created
-        #     'object_repr': None,            # No object representation available
-        #     'instance': None,               # No Django model instance was created
-        #     'original': None                # No original object (this was meant to be new)
-        # }
 
     def for_delete(self, row, instance):
         # Delete if 'delete' column has value '1'
