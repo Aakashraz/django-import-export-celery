@@ -233,7 +233,7 @@ class CustomExportForm(ExportForm):
 
 # Customizing ModelAdmin
 class CustomBookAdmin(ImportMixin, admin.ModelAdmin):
-    resource_class = [BookResource]
+    resource_class = BookResource
     # Tells Django to use the custom import form with the author field.
     import_form_class = CustomImportForm
     # Uses the custom confirmation form.
@@ -267,7 +267,8 @@ class CustomBookAdmin(ImportMixin, admin.ModelAdmin):
 
     # Saving the Author with the EBook
     # To actually associate the selected `author` with each imported Ebook instance, two more
-    # methods are added to CustomBookAdmin
+    # methods are added to CustomBookAdmin.
+    # This method grabs the `author` from the import form (CustomImportForm) and passes it to the resource.
     def get_import_data_kwargs(self, request, *args, **kwargs):
         """
         Prepare kwargs for import_data
